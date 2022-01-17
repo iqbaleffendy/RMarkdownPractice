@@ -42,7 +42,7 @@ library(scales)
 library(highcharter)
 library(DT)
 
-path <- "D:\\Qualification\\Skill Test\\eFishery\\Data Source\\data-perikanan-nasional.xlsx"
+path <- "Data Source\\data-perikanan-nasional.xlsx"
 sheetnames <- excel_sheets(path)
 
 for(i in seq_along(sheetnames)) {
