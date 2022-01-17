@@ -1,0 +1,223 @@
+---
+title: "RMarkdown Practice"
+author: "Iqbal Effendy"
+date: "17/01/2022"
+output: 
+  html_document:
+    code_folding: show
+  theme: flatly
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Data Perikanan Nasional
+
+Data Perikanan Nasional terdiri atas:
+
+1.  Daftar Parameter Angka Konsumsi Ikan
+
+2.  Jumlah Produksi Benih
+
+3.  Pembudidaya Ikan Nasional
+
+4.  Produksi Ikan Budidaya Nasional
+
+5.  Produk Olahan Ikan Nasional
+
+6.  Produksi Perlakuan Ikan Nasional
+
+Telah dilakukan normalisasi pada tabel-tabel tersebut, selanjutnya akan dilakukan eksplorasi data untuk mencari insight dari data tersebut. Eksplorasi data dilakukan dengan menggunakan tools R code.
+
+## Load Data dan Library
+
+#### Data Perikanan Nasional di *load* ke R memory menggunakan package **readxl**.
+
+```{r `, echo=TRUE, message=FALSE, warning=FALSE}
+library(readxl)
+library(tidyverse)
+library(scales)
+library(highcharter)
+library(DT)
+
+path <- "D:\\Qualification\\Skill Test\\eFishery\\data-perikanan-nasional.xlsx"
+sheetnames <- excel_sheets(path)
+
+for(i in seq_along(sheetnames)) {
+  assign(sheetnames[i], read_excel(path = path, sheet = i))
+}
+
+print(sheetnames)
+```
+
+## Tren Jumlah Pembudidaya Ikan
+
+#### Mengetahui persebaran pembudidaya ikan untuk setiap provinsi per tahun:
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+pembudidayaikannasional %>%
+  left_join(tabelprovinsi, by = "ProvinsiID") %>%
+  mutate(NamaProvinsi = as.factor(NamaProvinsi), Tahun = as.factor(Tahun)) %>% 
+  group_by(Tahun, NamaProvinsi) %>% 
+  summarise(JumlahPembudidaya = sum(JumlahPembudidaya)) %>%
+  hchart(type = "column", hcaes(x = Tahun, y = JumlahPembudidaya, group = NamaProvinsi), stacking = "normal")
+
+```
+
+Berdasarkan grafik di atas, persebaran pembudidaya secara mayoritas berlokasi di Pulau Jawa, yaitu Jawa Barat, Jawa Tengah dan Jawa Timur secara berturut-turut.
+
+#### Selanjutnya dilakukan perhitungan untuk mengetahui tren perubahan jumlah pembudidaya setiap tahunnya:
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+pembudidayaikannasional %>% 
+  group_by(Tahun) %>% 
+  summarise(JumlahPembudidaya = sum(JumlahPembudidaya)) %>%
+  mutate(Kenaikan = (JumlahPembudidaya - lag(JumlahPembudidaya)) / JumlahPembudidaya) %>% 
+  mutate(KenaikanPercent = percent(Kenaikan)) %>% 
+  hchart(type = "line", hcaes(x = Tahun, y = (Kenaikan * 100)))
+```
+
+Dapat diamati bahwa tren pertumbuhan jumlah pembudidaya tertinggi terjadi pada tahun 2010 (25,6%) dan 2012 (26,15%), serta untuk penurunan jumlah pembudidaya tertinggi terjadi pada tahun 2006 (-10,16%).
+
+## Eksplorasi Tabel Produksi Budidaya Nasional
+
+Berdasarkan Tabel Produksi Budidaya Nasional 2003-2012, dilakukan perhitungan untuk mengetahui Top 3 komoditas ikan setiap provinsi berdasarkan rerata jumlah/volume produksi dan nilai dari komoditas tersebut:
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+datatable(
+  produksibudidayanasional %>%
+  left_join(tabelprovinsi, by = "ProvinsiID") %>% 
+  left_join(tabelikan, by = "IkanID") %>% 
+  group_by(ProvinsiID, NamaProvinsi, IkanID, NamaIkan) %>%
+  summarise(RerataProduksiIkan = mean(VolumeProduksi), NilaiProduksiIkan = mean(NilaiProduksi)) %>% 
+  ungroup() %>% 
+  arrange(desc(RerataProduksiIkan, NilaiProduksiIkan)) %>%
+  group_by(NamaProvinsi) %>% 
+  slice(1:3),
+  class = 'cell-border stripe'
+)
+```
+
+#### Perhitungan berikut untuk mengetahui persentase rerata produksi nasional berdasarkan wilayah:
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+produksibudidayanasional %>%
+  left_join(tabelprovinsi, by = "ProvinsiID") %>% 
+  group_by(Wilayah) %>% 
+  summarize(Rerata = mean(VolumeProduksi)) %>% 
+  hchart(type = "treemap", hcaes(x = Wilayah, value = Rerata, color = Rerata))
+```
+
+Wilayah Sulawesi memiliki nilai rata-rata produksi nasional tertinggi dengan produksi 20.948 ekor/tahun, diikuti oleh Jawa (13.720 ekor/tahun) dan Bali-NTT (17.646 ekor/tahun)
+
+#### Selanjutnya, dilakukan perhitungan untuk mengetahui valuasi komoditas ikan per volume produksinya (Rp/Ekor):
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+produksibudidayanasional %>%
+  left_join(tabelikan, by = "IkanID") %>% 
+  group_by(IkanID, NamaIkan) %>% 
+  summarise(NilaiProduksiIkan = mean(NilaiProduksi), RerataProduksiIkan = mean(VolumeProduksi)) %>%
+  mutate(NilaiPerEkor = NilaiProduksiIkan / RerataProduksiIkan) %>% 
+  arrange(desc(NilaiPerEkor)) %>% 
+  hchart(type = "column", hcaes(x = NamaIkan, y = NilaiPerEkor))
+```
+
+Berdasarkan grafik di atas, komoditas dengan valuasi tertinggi yaitu kerapu (Rp110.527/volume produksi) sedangkan komoditas dengan valuasi terendah adalah rumput laut (Rp2.288/volume produksi).
+
+## Perhitungan Produktivitas Pembudidaya per Provinsi
+
+Dengan adanya data jumlah pembudidaya per provinsi dan jumlah produksi per provinsi, akan dilakukan perhitungan produktivitas pembudidaya yaitu rasio antara rerata jumlah produksi per provinsi dibandingkan dengan satuan jumlah pembudidaya per provinsi:
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+produksibudidayanasional %>% 
+  left_join(pembudidayaikannasional, by = c("ProvinsiID", "Tahun")) %>% 
+  select(ProvinsiID, Tahun, VolumeProduksi, NilaiProduksi, JumlahPembudidaya) %>%
+  left_join(tabelprovinsi, by = "ProvinsiID") %>%
+  mutate(Rasio = VolumeProduksi / JumlahPembudidaya, NilaiPerPembudidaya = NilaiProduksi / JumlahPembudidaya) %>% 
+  group_by(NamaProvinsi, Wilayah) %>% 
+  summarize(Rasio = mean(Rasio), NilaiPerPembudidaya = mean(NilaiPerPembudidaya)) %>% 
+  arrange(desc(Rasio, NilaiPerPembudidaya)) %>% 
+  hchart(type = "scatter", hcaes(x = Rasio, y = NilaiPerPembudidaya, group = NamaProvinsi))
+  
+```
+
+```{r message=FALSE, warning=FALSE}
+produksibudidayanasional %>% 
+  left_join(pembudidayaikannasional, by = c("ProvinsiID", "Tahun")) %>% 
+  select(ProvinsiID, Tahun, VolumeProduksi, NilaiProduksi, JumlahPembudidaya) %>%
+  left_join(tabelprovinsi, by = "ProvinsiID") %>%
+  mutate(Rasio = VolumeProduksi / JumlahPembudidaya, NilaiPerPembudidaya = NilaiProduksi / JumlahPembudidaya) %>% 
+  group_by(NamaProvinsi, Wilayah) %>% 
+  summarize(Rasio = mean(Rasio), NilaiPerPembudidaya = mean(NilaiPerPembudidaya)) %>% 
+  arrange(desc(Rasio, NilaiPerPembudidaya)) %>% 
+  hchart(type = "column", hcaes(x = Wilayah, y = Rasio))
+```
+
+Berdasarkan tabel di atas, tiga provinsi dengan nilai produktivitas tertinggi berlokasi di Indonesia Bagian Timur yaitu: Maluku (0,69), Sulawesi Tengah (0,57) dan Nusa Tenggara Timur (0,45). Hal tersebut mengindikasikan bahwa potensi perikanan yang tinggi terdapat pada daerah-daerah tersebut dan pengaplikasian teknologi pada proses budidaya akan memaksimalkan potensi tersebut.
+
+## Eksplorasi Tabel Produksi Benih
+
+#### Menghitung perbandingan rerata produksi benih pertahun untuk setiap jenis budidaya:
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+jumlahproduksibenih %>%
+  mutate(Budidaya = as.factor(Budidaya)) %>% 
+  group_by(Budidaya) %>% 
+  summarise(RerataBenih = mean(Jumlah)) %>% 
+  hchart(type = "pie", hcaes(x = Budidaya, y = RerataBenih))
+```
+
+Berdasarkan hasil kalkukasi, jenis budidaya dengan rerata produksi benih tertinggi yaitu budidaya tambak (47.138.196 Benih/Tahun) dan budidaya kolam (29.162.156 Benih/Tahun).
+
+## Ekplorasi Tabel Pengolahan dan Perlakuan Ikan Nasional
+
+#### Integrasi data pada table Produksi Perlakuan Ikan Nasional:
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+produksiolahannasional <- produksiperlakuanikannasional %>% 
+  left_join(tabelperlakuan, by = "PerlakuanID") %>% 
+  left_join(tabelolahan, by = "OlahanID") %>% 
+  left_join(tabeljenisperairan, by = "PerairanID") %>% 
+  left_join(tabelprovinsi, by = "ProvinsiID") %>% 
+  select(-ID, -ProvinsiID, -PerlakuanID, -PerairanID, -OlahanID) %>% 
+  select(NamaProvinsi, Wilayah, JenisPerairan, JenisOlahan, JenisPerlakuan, Tahun, VolumePerlakuan) %>% 
+  mutate_if(is.character, as.factor) %>% 
+  mutate(Tahun = as.factor(Tahun))
+
+datatable(produksiolahannasional, class = 'cell-border stripe')
+```
+
+#### Selanjutnya, dilakukan perhitungan untuk melihat tren pertumbuhan pascapanen / pengolahan ikan berdasarkan jenis perlakuannya:
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+produksiolahannasional %>% 
+  group_by(Tahun, JenisPerlakuan) %>% 
+  summarize(Total = sum(VolumePerlakuan)) %>% 
+  hchart(type = "line", hcaes(x = Tahun, y = Total, group = JenisPerlakuan))
+```
+
+Berdasarkan grafik di atas, mayoritas pembudidaya belum melakukan proses pasca panen, ditandai dengan tren penjualan ikan dengan dipasarkan segar lebih tinggi dibandingkan perlakuan lainnya. Teknik pascapanen yang jamak digunakan oleh pembudidaya adalah pengeringan dan pembekuan.
+
+#### Selanjutnya, dilakukan perhitungan untuk melihat persebaran perlakuan pascapanen berdasarkan wilayah:
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+produksiolahannasional %>% 
+  group_by(Wilayah, JenisPerlakuan) %>% 
+  summarize(Rerata = mean(VolumePerlakuan)) %>% 
+  arrange(desc(Rerata)) %>% 
+  hchart(type = "bar", hcaes(x = Wilayah, y = Rerata, group = JenisPerlakuan), stacking = "normal")
+```
+
+Menilai dari masih rendahnya pengaplikasian teknologi pasca panen, dibutuhkan sosialisasi kepada pembudidaya khususnya kepada pembudidaya yang berlokasi di wilayah dengan potensi perikanan dan produktivitas tinggi sehingga akan meningkatkan valuasi dari produk tersebut.
+
+## Summary
+
+Berdasarkan hasil eksplorasi Data Perikanan Nasional, insight yang dapat diambil adalah terjadi tren peningkatan masyarakat yang berprofesi sebagai pembudidaya dari tahun 2002 - 2012. Tren tersebut merupakan hal yang positif bagi eFishery sebagai penyedia inovasi teknologi di bidang aquaculture untuk membantu para pembudidaya meningkatan efisiensi dalam proses pra-panen.
+
+Walaupun secara jumlah pembudidaya mayoritas dari Pulau Jawa, berdasarkan perhitungan produktivitas pembudidaya, yaitu rasio antara rerata jumlah produksi per provinsi dibandingkan dengan satuan jumlah pembudidaya per provinsi, wilayah Indonesia Timur (Maluku-Papua, Sulawesi) memiliki nilai tertinggi dibandingkan dengan wilayah lain. Hal tersebut mengindikasikan bahwa potensi perikanan yang tinggi terdapat pada daerah-daerah tersebut dan pengaplikasian teknologi pada proses budidaya akan memaksimalkan potensi tersebut.
+
+Beralih kepada pembahasan di bagian komoditas, Ikan Kerapu merupakan komoditas dengan nilai valuasi tertinggi (nilai/satuan volume produksi) dibandingkan dengan komoditas lain. Namun, perlu dilakukan analisis lebih lanjut terkait pengaruh produksi benih dan jumlah produksi ikan budidaya karena pada data yang digunakan belum ada keterkaitan antara kedua data tersebut.
+
+Perhitungan data produksi ikan olahan menunjukkan, bahwa mayoritas pembudidaya masih menjual hasil panen nya dalam bentuk dipasarkan secara segar tanpa adanya perlakuan pasca panen. Hanya pada wilayah Maluku-Papua, masyarakat pembudidaya secara mayoritas melakukan pembekuan pada hasil panennya. Menurut penulis, dibutuhkan sosialisasi kepada pembudidaya khususnya kepada pembudidaya yang berlokasi di wilayah dengan potensi perikanan dan produktivitas tinggi sehingga akan meningkatkan valuasi dari produk tersebut.
